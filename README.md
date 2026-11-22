@@ -55,6 +55,21 @@ instances are **nodes**, which receive them as custom certificates named
 
 The web interface and log messages are currently in Russian.
 
+### Use a prebuilt release image
+
+Download the `linux-amd64.tar.gz` image archive from the
+[GitHub Releases page](https://github.com/aspidovss/NPMplus-tls-sync/releases).
+In the repository directory, prepare `.env` as described in steps 1–2 above.
+Replace `v0.1.0` below with the release tag you downloaded.
+
+```sh
+docker load --input npmplus-tls-sync-v0.1.0-linux-amd64.tar.gz
+```
+
+In `docker-compose.yml`, set the service's `image` to `nmp-sync:v0.1.0` and
+start it with `docker compose up -d --no-build`. Continue with step 4 above.
+The release image targets Linux on x86-64.
+
 ### Nodes on the Docker host
 
 Inside the sync container, `127.0.0.1` refers to the container itself. To reach
@@ -142,6 +157,8 @@ The end-to-end checks cover certificate creation and reuse, unchanged
 certificates, rotation, proxy-host assignment, expired certificates, and
 authentication failures. GitHub Actions also builds the Docker image and checks
 the running container's `/health` and `/login` endpoints.
+Pushing a version tag such as `v0.1.0` publishes the tested image as an
+attachment to the corresponding GitHub release.
 
 ## License
 
