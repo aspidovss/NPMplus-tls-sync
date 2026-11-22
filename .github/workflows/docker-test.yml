@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build image
         run: docker build --tag npmplus-tls-sync:test .
@@ -25,13 +25,17 @@ jobs:
             --env APP_SECRET=ci-only-secret-0123456789 \
             --env ADMIN_PASSWORD=ci-only-password \
             npmplus-tls-sync:test
+          # The published port can reset connections while Uvicorn starts.
           curl --fail --silent --show-error --retry 15 --retry-delay 1 \
-            --retry-connrefused --max-time 5 http://127.0.0.1:18080/health
+            --retry-all-errors --retry-max-time 30 --max-time 5 \
+            http://127.0.0.1:18080/health
           curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18080/login > /dev/null
 
       - name: Show container logs on failure
         if: failure()
-        run: docker logs npmplus-tls-sync-test
+        run: |
+          docker inspect --format '{{json .State}}' npmplus-tls-sync-test || true
+          docker logs npmplus-tls-sync-test || true
 
       - name: Remove test container
         if: always()
