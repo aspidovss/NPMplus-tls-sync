@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1>Сертификаты мастера</h1>
+  {% if not master %}
+    <p>Сначала <a href="/servers/new">добавьте мастер-сервер</a>.</p>
+  {% elif not certs %}
+    <p>Список появится после первой синхронизации.</p>
+  {% else %}
+  <p class="muted">Отмеченные сертификаты синхронизируются на все включённые ноды. Просроченные пропускаются автоматически.
+    Сертификаты типа «Custom» на мастере по умолчанию не включаются.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <table>
+      <thead><tr><th><input type="checkbox" id="all" title="Все"></th><th>Домены</th><th>ID</th><th>Тип</th><th>Действует до</th><th>Состояние</th></tr></thead>
+      <tbody>
+      {% for c in certs %}
+        {% set dl = days_left(c.expires_at) %}
+        <tr>
+          <td><input type="checkbox" name="enabled" value="{{ c.cert_id }}" {{ 'checked' if c.enabled }}></td>
+          <td>{{ c.domains.replace(',', ', ') }}</td>
+          <td class="muted">npm-{{ c.cert_id }}</td>
+          <td>{{ 'Custom' if c.provider == 'other' else (c.provider or '—') }}</td>
+          <td>{% if c.expires_at %}{{ c.expires_at|dt }}{% if dl is not none and dl > 0 %} <span class="muted small">({{ '%.1f'|format(dl) }} дн.)</span>{% endif %}{% else %}—{% endif %}</td>
+          <td>{% if c.status == 'ok' %}<span class="badge ok">действует</span>
+              {% elif c.status == 'expired' %}<span class="badge err">истёк</span>
+              {% elif c.status == 'error' %}<span class="badge err" title="{{ c.message }}">ошибка</span> <span class="small err-text">{{ c.message[:100] }}</span>
+              {% else %}<span class="muted">не проверялся</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="actions"><button class="primary">Сохранить выбор</button></div>
+  </form>
+  <script>
+  document.getElementById('all').addEventListener('change', e =>
+    document.querySelectorAll('input[name=enabled]').forEach(c => c.checked = e.target.checked));
+  </script>
+  {% endif %}
+</div>
+{% endblock %}

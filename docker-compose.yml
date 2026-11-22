@@ -1,0 +1,18 @@
+services:
+  nmp-sync:
+    build: .
+    image: nmp-sync:local
+    container_name: nmp-sync
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Веб-интерфейс. Лучше привязать к адресу внутренней сети, например "192.168.2.2:8090:8080"
+      - "8090:8080"
+    extra_hosts:
+      # Позволяет обратиться к NPMplus на том же хосте: https://host.docker.internal:81
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - nmp-sync-data:/data
+
+volumes:
+  nmp-sync-data:

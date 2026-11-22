@@ -1,0 +1,22 @@
+#!/bin/sh
+# Экспорт сертификатов NPMplus для nmp-sync / certsync (только чтение).
+# Ставится на мастер в /usr/local/bin/cert-export, ключ в authorized_keys:
+#   restrict,command="/usr/local/bin/cert-export" ssh-ed25519 AAAA... nmp-sync
+#
+#   list   — строки "npm-N <домен>" для всех сертификатов (домен из SAN)
+#   npm-N  — tar с fullchain.pem и privkey.pem
+CONTAINER="${NPM_CONTAINER:-npmplus}"
+case "$SSH_ORIGINAL_COMMAND" in
+  list)
+    exec docker exec "$CONTAINER" sh -c '
+      for d in /data/tls/certbot/live/npm-*; do
+        [ -f "$d/fullchain.pem" ] || continue
+        name=$(openssl x509 -in "$d/fullchain.pem" -noout -ext subjectAltName | grep -o "DNS:[^, ]*" | head -1 | cut -d: -f2)
+        echo "$(basename "$d") $name"
+      done'
+    ;;
+  *)
+    echo "$SSH_ORIGINAL_COMMAND" | grep -qE '^npm-[0-9]+$' || { echo "bad id" >&2; exit 2; }
+    exec docker exec "$CONTAINER" tar -h -C "/data/tls/certbot/live/$SSH_ORIGINAL_COMMAND" -cf - fullchain.pem privkey.pem
+    ;;
+esac

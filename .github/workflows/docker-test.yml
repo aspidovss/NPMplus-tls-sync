@@ -1,0 +1,38 @@
+name: Docker build and smoke test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --tag npmplus-tls-sync:test .
+
+      - name: Check container startup
+        run: |
+          docker run --detach --name npmplus-tls-sync-test \
+            --publish 127.0.0.1:18080:8080 \
+            --env APP_SECRET=ci-only-secret-0123456789 \
+            --env ADMIN_PASSWORD=ci-only-password \
+            npmplus-tls-sync:test
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 \
+            --retry-connrefused --max-time 5 http://127.0.0.1:18080/health
+          curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18080/login > /dev/null
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs npmplus-tls-sync-test
+
+      - name: Remove test container
+        if: always()
+        run: docker rm --force --volumes npmplus-tls-sync-test || true

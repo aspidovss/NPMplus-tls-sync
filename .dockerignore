@@ -1,0 +1,9 @@
+.env
+.git
+dev/
+scripts/
+data/
+**/__pycache__
+*.db*
+README.md
+/*.html

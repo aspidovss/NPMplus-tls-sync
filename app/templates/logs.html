@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="cols">
+  <div class="card side">
+    <h2>Запуски</h2>
+    {% if not runs %}<p class="muted">Пока не было.</p>{% endif %}
+    <ul class="runs">
+    {% for r in runs %}
+      <li class="{{ 'active' if run and r.id == run.id }}"><a href="/logs?run={{ r.id }}">
+        <span class="badge {{ {'ok':'ok','partial':'warn','failed':'err','running':'info'}.get(r.status, '') }}">{{ {'ok':'✓','partial':'!','failed':'✗','running':'…'}.get(r.status, '?') }}</span>
+        {{ r.started_at|dt }} <span class="muted small">{{ r.trigger }}</span></a></li>
+    {% endfor %}
+    </ul>
+  </div>
+  <div class="card main">
+    {% if run %}
+      <h2>Запуск #{{ run.id }} — {{ run.started_at|dt }}</h2>
+      <p class="muted">{{ run.trigger }}; {{ run.summary or 'выполняется' }}</p>
+      <table class="log">
+        {% for e in events %}
+          <tr class="lvl-{{ e.level }}"><td class="muted mono small">{{ e.ts|dt }}</td><td>{{ e.level }}</td><td>{{ e.message }}</td></tr>
+        {% else %}
+          <tr><td class="muted">Изменений не было — все сертификаты на нодах актуальны.</td></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

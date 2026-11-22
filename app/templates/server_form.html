@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card form">
+  <h1>{{ 'Сервер «' ~ s.name ~ '»' if s.id else 'Новый сервер' }}</h1>
+  {% for e in errors %}<div class="flash err">{{ e }}</div>{% endfor %}
+  <form method="post" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+
+    <label>Название<input name="name" value="{{ s.name }}" required placeholder="VM public proxy"></label>
+
+    <fieldset class="roles">
+      <legend>Роль</legend>
+      <label class="inline"><input type="radio" name="role" value="master" {{ 'checked' if s.role == 'master' }}> Мастер — источник сертификатов (может быть только один)</label>
+      <label class="inline"><input type="radio" name="role" value="node" {{ 'checked' if s.role == 'node' }}> Нода — сюда загружаются сертификаты</label>
+    </fieldset>
+
+    <label>Адрес API NPMplus
+      <input name="url" value="{{ s.url }}" required placeholder="https://192.168.0.2:81">
+      <span class="hint">Адрес админки NPMplus, обычно https://IP:81. Путь /api добавляется сам.</span></label>
+    <label class="inline"><input type="checkbox" name="verify_tls" {{ 'checked' if s.verify_tls }}> Проверять TLS-сертификат админки
+      <span class="hint">Выключите для самоподписанного сертификата на порту 81.</span></label>
+
+    <div class="grid2">
+      <label>Логин (email) администратора<input name="username" value="{{ s.username }}" autocomplete="off"></label>
+      <label>Пароль<input name="password" type="password" autocomplete="new-password"
+        placeholder="{{ 'не менять' if s.password_enc else '' }}"></label>
+    </div>
+
+    <div id="master-only">
+      <fieldset>
+        <legend>Как забирать сертификаты с мастера</legend>
+        <label class="inline"><input type="radio" name="fetch_mode" value="api" {{ 'checked' if s.fetch_mode == 'api' }}> Только API (скачивание zip)</label>
+        <label class="inline"><input type="radio" name="fetch_mode" value="auto" {{ 'checked' if s.fetch_mode == 'auto' }}> API, при ошибке — SSH</label>
+        <label class="inline"><input type="radio" name="fetch_mode" value="ssh" {{ 'checked' if s.fetch_mode == 'ssh' }}> Только SSH (cert-export)</label>
+      </fieldset>
+      <div id="ssh-block">
+        <div class="grid3">
+          <label>SSH хост<input name="ssh_host" value="{{ s.ssh_host }}" placeholder="192.168.0.2"></label>
+          <label>Порт<input name="ssh_port" value="{{ s.ssh_port }}" inputmode="numeric"></label>
+          <label>Пользователь<input name="ssh_user" value="{{ s.ssh_user }}"></label>
+        </div>
+        <label>Закрытый ключ SSH
+          <textarea name="ssh_key" rows="5" class="mono" placeholder="{{ 'ключ сохранён — вставьте новый, чтобы заменить' if s.ssh_key_enc else '-----BEGIN OPENSSH PRIVATE KEY-----' }}"></textarea>
+          <span class="hint">На мастере ключ должен быть ограничен: <code>restrict,command="/usr/local/bin/cert-export"</code> в authorized_keys.</span></label>
+      </div>
+    </div>
+
+    <div id="node-only">
+      <label class="inline"><input type="checkbox" name="auto_assign" {{ 'checked' if s.auto_assign }}> Автоматически назначать сертификат прокси-хостам
+        <span class="hint">Если все домены прокси-хоста на ноде покрываются сертификатом, хосту будет назначен синхронизированный сертификат «sync: …». Хосты с другими доменами не трогаются.</span></label>
+    </div>
+
+    <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if s.enabled }}> Сервер включён</label>
+
+    <div class="actions">
+      <button class="primary">Сохранить</button>
+      <a class="button" href="/servers">Отмена</a>
+    </div>
+  </form>
+</div>
+<script>
+function upd() {
+  const role = document.querySelector('input[name=role]:checked')?.value;
+  const mode = document.querySelector('input[name=fetch_mode]:checked')?.value;
+  document.getElementById('master-only').hidden = role !== 'master';
+  document.getElementById('node-only').hidden = role !== 'node';
+  document.getElementById('ssh-block').hidden = !(mode === 'auto' || mode === 'ssh');
+}
+document.querySelectorAll('input[name=role], input[name=fetch_mode]').forEach(e => e.addEventListener('change', upd));
+upd();
+</script>
+{% endblock %}

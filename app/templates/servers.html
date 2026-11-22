@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="head">
+    <h1>Серверы NPMplus</h1>
+    <div class="actions"><a class="button primary" href="/servers/new">Добавить сервер</a></div>
+  </div>
+  {% if not servers %}
+    <p>Серверов пока нет. Добавьте один <strong>мастер</strong> (откуда берутся сертификаты) и одну или несколько <strong>нод</strong> (куда они загружаются).</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Название</th><th>Роль</th><th>Адрес API</th><th>Способ</th><th>Состояние</th><th></th></tr></thead>
+    <tbody>
+    {% for s in servers %}
+      <tr class="{{ '' if s.enabled else 'off' }}">
+        <td><a href="/servers/{{ s.id }}"><strong>{{ s.name }}</strong></a></td>
+        <td>{% if s.role == 'master' %}<span class="badge info">мастер</span>{% else %}<span class="badge">нода</span>{% endif %}</td>
+        <td class="mono">{{ s.url }}{% if not s.verify_tls %} <span class="muted small">(TLS не проверяется)</span>{% endif %}</td>
+        <td>{% if s.role == 'master' %}{{ {'api':'API','auto':'API, SSH запасной','ssh':'SSH'}[s.fetch_mode] }}
+            {% else %}API{% if s.auto_assign %}, авто-привязка к хостам{% endif %}{% endif %}</td>
+        <td>{{ 'включён' if s.enabled else 'выключен' }}</td>
+        <td class="row-actions">
+          <form method="post" action="/servers/{{ s.id }}/test">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button>Проверить</button>
+          </form>
+          <a class="button" href="/servers/{{ s.id }}">Изменить</a>
+          <form method="post" action="/servers/{{ s.id }}/delete" onsubmit="return confirm('Удалить сервер «{{ s.name }}» из настроек? На самом сервере ничего не удаляется.')">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Удалить</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
