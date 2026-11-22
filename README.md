@@ -1,114 +1,148 @@
 # NPMplus TLS Sync
 
-Контейнер с веб-интерфейсом для синхронизации TLS-сертификатов между серверами
-**NPMplus / Nginx Proxy Manager**. Один сервер — **мастер** (там certbot получает
-сертификаты Let's Encrypt), остальные — **ноды**, на которые сертификаты
-загружаются как Custom-сертификаты `sync: <домен>`.
+NPMplus TLS Sync is a Docker service with a web interface for distributing TLS
+certificates between NPMplus or Nginx Proxy Manager instances. One instance is
+the **master**, where Certbot obtains and renews certificates. The other
+instances are **nodes**, which receive them as custom certificates named
+`sync: <domain>`.
 
-```
- мастер NPMplus ──API (zip) / SSH (cert-export)──▶ nmp-sync ──API upload──▶ нода 1, нода 2, …
-```
+## Features
 
-## Что умеет
+- Configure server roles, API credentials, and TLS verification from the web interface.
+- Download certificates from the master through the API, over SSH, or through
+  the API with SSH as a fallback.
+- Choose which certificates to sync. New certificates are enabled automatically
+  by default, except for custom certificates discovered through the API.
+  Expired certificates are skipped.
+- Verify that the private key matches the certificate. Use a SHA-256
+  fingerprint of the certificate chain and key to skip unchanged uploads.
+- Reuse existing custom certificates named `sync: <domain>`, including those
+  created by the legacy `certsync` script.
+- Optionally assign certificates to proxy hosts on each node. Every domain on
+  a proxy host must be covered, including wildcard matches.
+- Run on a schedule (5–1440 minutes), sync on demand, or force a re-upload.
+  Review the results in the run log or through the monitoring endpoint.
 
-- Настройка серверов в интерфейсе: адрес API, логин и пароль, проверка TLS, роль, вкл/выкл.
-- Забор с мастера через API (`/nginx/certificates/{id}/download`), с запасным путём по SSH
-  через ограниченный ключ и скрипт `cert-export`.
-- Выбор сертификатов: все действующие или отмеченные вручную; новые подхватываются автоматически
-  (отключается в настройках). Просроченные пропускаются.
-- Загрузка только при изменении (SHA-256 сертификата и ключа), проверка соответствия ключа сертификату.
-- Ранее созданные сертификаты `sync: <домен>` на нодах (например, старым скриптом `certsync`)
-  подхватываются, дубликаты не создаются.
-- Опционально, для каждой ноды: автоматическое назначение сертификата прокси-хостам, у которых
-  **все** домены покрываются сертификатом (с учётом wildcard).
-- Расписание (5–1440 мин), кнопки «Синхронизировать сейчас» и «Принудительно», журнал запусков.
-- `GET /api/status` — JSON для мониторинга (Zabbix HTTP agent).
-- Пароли и SSH-ключи хранятся в SQLite зашифрованными (ключ из `APP_SECRET`).
+## Quick start
 
-## Быстрый старт
+1. Copy the environment template and restrict access to the copy.
 
-```sh
-cp .env.example .env
-chmod 600 .env
-# заполнить APP_SECRET (openssl rand -base64 32) и ADMIN_PASSWORD
-docker compose up -d --build
-```
+   ```sh
+   cp .env.example .env
+   chmod 600 .env
+   ```
 
-Интерфейс: `http://<хост>:8090`. Далее:
+2. Edit `.env`. Set `APP_SECRET` to a persistent random value of at least 16
+   characters (generate one with `openssl rand -base64 32`). Set
+   `ADMIN_PASSWORD` to a password of at least 8 characters. The default login
+   name is set by `ADMIN_USER` and is `admin`.
+3. Build and start the service.
 
-1. **Серверы → Добавить**: мастер (например `https://192.168.0.2:81`, TLS не проверять,
-   если у админки самоподписанный сертификат), логин (email) и пароль администратора NPMplus.
-2. Добавить ноды тем же способом.
-3. На каждом сервере нажать **Проверить**. Для мастера проверка пытается скачать один сертификат:
-   если API-скачивание не работает, переключите мастер в режим «API, при ошибке — SSH».
-4. **Обзор → Синхронизировать сейчас**.
+   ```sh
+   docker compose up -d --build
+   ```
 
-### Если контейнер стоит на том же хосте, что и нода
+4. Open `http://<docker-host>:8090` and sign in.
+5. Add the master and nodes on the **Servers** page (`Серверы`). Enter each
+   instance's admin URL, such as `https://192.168.0.2:81`, and its NPMplus
+   administrator credentials. Keep TLS verification enabled when the endpoint
+   has a certificate trusted by the container.
+6. Use **Test** (`Проверить`) on each server. The master's API check tries to
+   download one certificate when a non-custom certificate is available. If the
+   API cannot download it, configure the SSH fallback below.
+7. On the **Overview** page (`Обзор`), click **Sync now**
+   (`Синхронизировать сейчас`) and check the run log.
 
-`127.0.0.1` внутри контейнера — это сам контейнер. Укажите для ноды
-`https://host.docker.internal:81` (уже прописано в `docker-compose.yml`) или LAN-адрес хоста,
-например `https://192.168.2.2:81`.
+The web interface and log messages are currently in Russian.
 
-## Запасной путь по SSH
+### Nodes on the Docker host
 
-На мастере:
+Inside the sync container, `127.0.0.1` refers to the container itself. To reach
+a node running on the Docker host, enter `https://host.docker.internal:81`
+(the Compose file already maps that hostname) or use the host's LAN address.
+
+## SSH fallback
+
+On the master host, install the bundled export script and create a dedicated
+SSH key. Run these commands from the project directory as root.
 
 ```sh
 install -m 755 scripts/cert-export /usr/local/bin/cert-export
-ssh-keygen -t ed25519 -N '' -C nmp-sync -f nmp-sync      # ключ для контейнера
+ssh-keygen -t ed25519 -N '' -C nmp-sync -f nmp-sync
 echo "restrict,command=\"/usr/local/bin/cert-export\" $(cat nmp-sync.pub)" >> /root/.ssh/authorized_keys
 ```
 
-Содержимое `nmp-sync` (закрытый ключ) вставьте в форму мастера. Ключ может выполнить только
-`cert-export`: `list` или `npm-N`. Имя контейнера NPMplus можно переопределить переменной
-`NPM_CONTAINER` в самом скрипте. Отпечаток хоста запоминается при первом подключении
-(`/data/known_hosts`).
+In the master's settings, choose API with SSH fallback or SSH only. Enter the
+SSH connection details and paste the contents of `nmp-sync` into the private
+key field. The forced command supports `list` for discovery and `npm-N` for
+exporting one certificate. It expects the NPMplus container to be named
+`npmplus`. Edit the default in `cert-export` if yours has a different name.
+The SSH host key is recorded in `/data/known_hosts` on first connection.
 
-## Переход со старого certsync
+## Migrating from certsync
 
-1. Развернуть контейнер, добавить мастер и ноду, нажать **Синхронизировать сейчас**.
-2. Убедиться в журнале, что существующие `sync: …` подхвачены (сообщений «создан сертификат»
-   для них нет) и ошибок нет.
-3. Отключить старый таймер: `systemctl disable --now certsync.timer`.
+1. Start the container, add your master and nodes, and run a manual sync.
+2. Check the run log for errors. Existing matching `sync: <domain>` entries
+   should be reused without a certificate creation event.
+3. Once the new sync works, disable the old timer on the host that runs it.
 
-## Мониторинг
+   ```sh
+   systemctl disable --now certsync.timer
+   ```
 
-`GET /api/status` с заголовком `X-Token: <STATUS_TOKEN>`:
+## Monitoring
 
-```json
-{"running": false, "errors": 0, "min_days_left": 3.4,
- "last_run": {"status": "ok", "summary": "загружено: 1, привязано: 0, ошибок: 0", ...},
- "certs": [{"domains": ["cloud.example.ru"], "status": "ok", "days_left": 3.4,
-            "nodes": {"DietPi": "ok"}}]}
+Set `STATUS_TOKEN` in `.env` and send it in the `X-Token` header when
+requesting `GET /api/status`. An authenticated web session can also access
+the endpoint.
+
+```sh
+curl --fail -H "X-Token: $STATUS_TOKEN" http://localhost:8090/api/status
 ```
 
-Триггеры для Zabbix: `errors > 0`, `last_run.status <> "ok"`, `min_days_left < 2`
-(сертификаты Let's Encrypt с профилем `shortlived` живут около 6 дней).
+Set the shell variable `STATUS_TOKEN` to the same value before running the
+command. The response includes the latest completed run, the error count,
+the shortest remaining lifetime among enabled certificates that have not
+expired, and per-node status for each enabled certificate. In Zabbix, you can
+alert when `errors` is greater than zero, `last_run.status` reports a failure,
+or a numeric `min_days_left` falls below your threshold.
 
-## Безопасность
+## Security and storage
 
-- Интерфейс не стоит публиковать в интернет: привяжите порт к LAN-адресу или закройте через
-  Access List в NPMplus. При доступе через HTTPS-прокси выставьте `COOKIE_SECURE=1`.
-- CSRF-токен во всех формах, cookie сессии `SameSite=Strict`, задержка при неверном пароле.
-- Учётная запись NPMplus для нод должна иметь права на сертификаты и (для авто-привязки) прокси-хосты.
-- Контейнер работает от непривилегированного пользователя (uid 10001). Если монтируете каталог
-  вместо именованного тома, выполните `chown 10001 <каталог>`.
+- Restrict the UI to trusted clients, for example by binding the published port
+  to a LAN address or restricting access through an NPMplus Access List. For
+  HTTPS deployments, set `COOKIE_SECURE=1`.
+- Forms use CSRF tokens. The session cookie uses `SameSite=Strict`, and
+  failed login attempts incur a short delay.
+- Server passwords and SSH keys are encrypted in SQLite using a key derived
+  from `APP_SECRET`. Keep the same secret across restarts and when restoring
+  the data volume.
+- Node API accounts need permission to manage certificates and, if automatic
+  assignment is enabled, proxy hosts.
+- Compose stores application state in the named volume mounted at `/data`.
+  The container runs as UID 10001. If you use a bind mount, make its data
+  directory writable by that UID.
 
-## Разработка
+## Development
+
+In a POSIX shell, start the two mock servers and the app, then run the
+end-to-end checks. Use a fresh SQLite database for each run.
 
 ```sh
 pip install -r requirements.txt
 python -m dev.mock_npm --port 9001 --role master --auth cookie &
 python -m dev.mock_npm --port 9002 --role node --auth bearer &
-DB_PATH=/tmp/nmpsync.db APP_SECRET=dev-secret-0123456789 ADMIN_PASSWORD=adminpass1 \
+DB_PATH="$(mktemp -d)/nmpsync.db" APP_SECRET=dev-secret-0123456789 ADMIN_PASSWORD=adminpass1 \
   uvicorn app.main:app --port 8080 &
+# Wait for the mock servers and the application to start before running the test.
 python -m dev.e2e
 ```
 
-`dev/mock_npm.py` имитирует API NPMplus (вход по cookie или Bearer, сертификаты, прокси-хосты),
-`dev/e2e.py` проверяет полный цикл: создание, повторный запуск без изменений, ротацию,
-привязку к хостам, просроченные сертификаты и ошибки входа.
+The end-to-end checks cover certificate creation and reuse, unchanged
+certificates, rotation, proxy-host assignment, expired certificates, and
+authentication failures. GitHub Actions also builds the Docker image and checks
+the running container's `/health` and `/login` endpoints.
 
-## Лицензия
+## License
 
 MIT
