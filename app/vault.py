@@ -5,6 +5,8 @@ import os
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .i18n import message
+
 _fernet: Fernet | None = None
 
 
@@ -30,4 +32,4 @@ def decrypt(value: str) -> str:
     try:
         return _f().decrypt(value.encode()).decode()
     except InvalidToken as e:
-        raise RuntimeError("Не удалось расшифровать секрет: APP_SECRET изменился?") from e
+        raise RuntimeError(message("Не удалось расшифровать секрет: APP_SECRET изменился?")) from e

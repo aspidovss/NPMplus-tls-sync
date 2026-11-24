@@ -5,12 +5,18 @@ import zipfile
 import requests
 import urllib3
 
+from .i18n import message
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 TIMEOUT = 30
 
 
 class NPMError(Exception):
+    pass
+
+
+class NPMAuthError(NPMError):
     pass
 
 
@@ -45,9 +51,9 @@ class NPMClient:
             r = self.s.post(self.base + "/tokens", timeout=TIMEOUT,
                             json={"identity": self.username, "secret": self.password, "scope": "user"})
         except requests.RequestException as e:
-            raise NPMError(f"вход: {e.__class__.__name__}: {e}") from e
+            raise NPMAuthError(message("вход: {type}: {error}", type=e.__class__.__name__, error=e)) from e
         if r.status_code != 200:
-            raise NPMError(f"вход не удался: HTTP {r.status_code} {r.text[:200]}")
+            raise NPMAuthError(message("вход не удался: HTTP {status} {response}", status=r.status_code, response=r.text[:200]))
         try:
             data = r.json()
         except ValueError:
@@ -56,7 +62,7 @@ class NPMClient:
         if token:
             self.s.headers["Authorization"] = f"Bearer {token}"
         elif not self.s.cookies:
-            raise NPMError("вход: сервер не вернул ни token, ни cookie")
+            raise NPMAuthError(message("вход: сервер не вернул ни token, ни cookie"))
         self._logged_in = True
 
     # --- сертификаты ----------------------------------------------------
@@ -69,7 +75,7 @@ class NPMClient:
         try:
             z = zipfile.ZipFile(io.BytesIO(r.content))
         except zipfile.BadZipFile as e:
-            raise NPMError(f"download {cert_id}: ответ не zip") from e
+            raise NPMError(message("download {id}: ответ не zip", id=cert_id)) from e
         full = key = None
         for info in z.infolist():
             base = info.filename.rsplit("/", 1)[-1].lower()
@@ -80,7 +86,7 @@ class NPMClient:
             elif base.startswith("privkey") and base.endswith(".pem"):
                 key = z.read(info)
         if not full or not key:
-            raise NPMError(f"download {cert_id}: в архиве нет fullchain/privkey")
+            raise NPMError(message("download {id}: в архиве нет fullchain/privkey", id=cert_id))
         return full, key
 
     def create_custom_certificate(self, nice_name: str) -> int:
@@ -88,7 +94,7 @@ class NPMClient:
                          json={"provider": "other", "nice_name": nice_name}).json()
         cid = data.get("id") if isinstance(data, dict) else None
         if not isinstance(cid, int):
-            raise NPMError(f"создание сертификата: неожиданный ответ {str(data)[:200]}")
+            raise NPMError(message("создание сертификата: неожиданный ответ {response}", response=str(data)[:200]))
         return cid
 
     def upload_certificate(self, cert_id: int, fullchain: bytes, privkey: bytes) -> None:

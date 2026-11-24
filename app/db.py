@@ -61,6 +61,7 @@ CREATE INDEX IF NOT EXISTS events_run ON events(run_id);
 """
 
 DEFAULT_SETTINGS = {
+    "language": "en",
     "interval_minutes": "60",
     "auto_include_new": "1",
     "keep_runs": "300",

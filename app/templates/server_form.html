@@ -1,60 +1,60 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card form">
-  <h1>{{ 'Сервер «' ~ s.name ~ '»' if s.id else 'Новый сервер' }}</h1>
+  <h1>{{ t("Сервер «{name}»", name=s.name) if s.id else t("Новый сервер") }}</h1>
   {% for e in errors %}<div class="flash err">{{ e }}</div>{% endfor %}
   <form method="post" autocomplete="off">
     <input type="hidden" name="csrf" value="{{ csrf }}">
 
-    <label>Название<input name="name" value="{{ s.name }}" required placeholder="VM public proxy"></label>
+    <label>{{ t("Название") }}<input name="name" value="{{ s.name }}" required placeholder="VM public proxy"></label>
 
     <fieldset class="roles">
-      <legend>Роль</legend>
-      <label class="inline"><input type="radio" name="role" value="master" {{ 'checked' if s.role == 'master' }}> Мастер — источник сертификатов (может быть только один)</label>
-      <label class="inline"><input type="radio" name="role" value="node" {{ 'checked' if s.role == 'node' }}> Нода — сюда загружаются сертификаты</label>
+      <legend>{{ t("Роль") }}</legend>
+      <label class="inline"><input type="radio" name="role" value="master" {{ 'checked' if s.role == 'master' }}> {{ t("Мастер — источник сертификатов (может быть только один)") }}</label>
+      <label class="inline"><input type="radio" name="role" value="node" {{ 'checked' if s.role == 'node' }}> {{ t("Нода — сюда загружаются сертификаты") }}</label>
     </fieldset>
 
-    <label>Адрес API NPMplus
+    <label>{{ t("Адрес API NPMplus") }}
       <input name="url" value="{{ s.url }}" required placeholder="https://192.168.0.2:81">
-      <span class="hint">Адрес админки NPMplus, обычно https://IP:81. Путь /api добавляется сам.</span></label>
-    <label class="inline"><input type="checkbox" name="verify_tls" {{ 'checked' if s.verify_tls }}> Проверять TLS-сертификат админки
-      <span class="hint">Выключите для самоподписанного сертификата на порту 81.</span></label>
+      <span class="hint">{{ t("Адрес админки NPMplus, обычно https://IP:81. Путь /api добавляется сам.") }}</span></label>
+    <label class="inline"><input type="checkbox" name="verify_tls" {{ 'checked' if s.verify_tls }}> {{ t("Проверять TLS-сертификат админки") }}
+      <span class="hint">{{ t("Выключите для самоподписанного сертификата на порту 81.") }}</span></label>
 
     <div class="grid2">
-      <label>Логин (email) администратора<input name="username" value="{{ s.username }}" autocomplete="off"></label>
-      <label>Пароль<input name="password" type="password" autocomplete="new-password"
-        placeholder="{{ 'не менять' if s.password_enc else '' }}"></label>
+      <label>{{ t("Логин (email) администратора") }}<input name="username" value="{{ s.username }}" autocomplete="off"></label>
+      <label>{{ t("Пароль") }}<input name="password" type="password" autocomplete="new-password"
+        placeholder="{{ t("не менять") if s.password_enc else '' }}"></label>
     </div>
 
     <div id="master-only">
       <fieldset>
-        <legend>Как забирать сертификаты с мастера</legend>
-        <label class="inline"><input type="radio" name="fetch_mode" value="api" {{ 'checked' if s.fetch_mode == 'api' }}> Только API (скачивание zip)</label>
-        <label class="inline"><input type="radio" name="fetch_mode" value="auto" {{ 'checked' if s.fetch_mode == 'auto' }}> API, при ошибке — SSH</label>
-        <label class="inline"><input type="radio" name="fetch_mode" value="ssh" {{ 'checked' if s.fetch_mode == 'ssh' }}> Только SSH (cert-export)</label>
+        <legend>{{ t("Как забирать сертификаты с мастера") }}</legend>
+        <label class="inline"><input type="radio" name="fetch_mode" value="api" {{ 'checked' if s.fetch_mode == 'api' }}> {{ t("Только API (скачивание zip)") }}</label>
+        <label class="inline"><input type="radio" name="fetch_mode" value="auto" {{ 'checked' if s.fetch_mode == 'auto' }}> {{ t("API, при ошибке — SSH") }}</label>
+        <label class="inline"><input type="radio" name="fetch_mode" value="ssh" {{ 'checked' if s.fetch_mode == 'ssh' }}> {{ t("Только SSH (cert-export)") }}</label>
       </fieldset>
       <div id="ssh-block">
         <div class="grid3">
-          <label>SSH хост<input name="ssh_host" value="{{ s.ssh_host }}" placeholder="192.168.0.2"></label>
-          <label>Порт<input name="ssh_port" value="{{ s.ssh_port }}" inputmode="numeric"></label>
-          <label>Пользователь<input name="ssh_user" value="{{ s.ssh_user }}"></label>
+          <label>{{ t("SSH хост") }}<input name="ssh_host" value="{{ s.ssh_host }}" placeholder="192.168.0.2"></label>
+          <label>{{ t("Порт") }}<input name="ssh_port" value="{{ s.ssh_port }}" inputmode="numeric"></label>
+          <label>{{ t("Пользователь") }}<input name="ssh_user" value="{{ s.ssh_user }}"></label>
         </div>
-        <label>Закрытый ключ SSH
-          <textarea name="ssh_key" rows="5" class="mono" placeholder="{{ 'ключ сохранён — вставьте новый, чтобы заменить' if s.ssh_key_enc else '-----BEGIN OPENSSH PRIVATE KEY-----' }}"></textarea>
-          <span class="hint">На мастере ключ должен быть ограничен: <code>restrict,command="/usr/local/bin/cert-export"</code> в authorized_keys.</span></label>
+        <label>{{ t("Закрытый ключ SSH") }}
+          <textarea name="ssh_key" rows="5" class="mono" placeholder="{{ t("ключ сохранён — вставьте новый, чтобы заменить") if s.ssh_key_enc else '-----BEGIN OPENSSH PRIVATE KEY-----' }}"></textarea>
+          <span class="hint">{{ t("На мастере ключ должен быть ограничен:") }} <code>restrict,command="/usr/local/bin/cert-export"</code> {{ t("в authorized_keys.") }}</span></label>
       </div>
     </div>
 
     <div id="node-only">
-      <label class="inline"><input type="checkbox" name="auto_assign" {{ 'checked' if s.auto_assign }}> Автоматически назначать сертификат прокси-хостам
-        <span class="hint">Если все домены прокси-хоста на ноде покрываются сертификатом, хосту будет назначен синхронизированный сертификат «sync: …». Хосты с другими доменами не трогаются.</span></label>
+      <label class="inline"><input type="checkbox" name="auto_assign" {{ 'checked' if s.auto_assign }}> {{ t("Автоматически назначать сертификат прокси-хостам") }}
+        <span class="hint">{{ t("Если все домены прокси-хоста на ноде покрываются сертификатом, хосту будет назначен синхронизированный сертификат «sync: …». Хосты с другими доменами не трогаются.") }}</span></label>
     </div>
 
-    <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if s.enabled }}> Сервер включён</label>
+    <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if s.enabled }}> {{ t("Сервер включён") }}</label>
 
     <div class="actions">
-      <button class="primary">Сохранить</button>
-      <a class="button" href="/servers">Отмена</a>
+      <button class="primary">{{ t("Сохранить") }}</button>
+      <a class="button" href="/servers">{{ t("Отмена") }}</a>
     </div>
   </form>
 </div>

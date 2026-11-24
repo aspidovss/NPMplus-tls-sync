@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from . import db, pem, sshsrc, vault
-from .npm import NPMClient, NPMError
+from .i18n import current_language, language, message
+from .npm import NPMAuthError, NPMClient, NPMError
 
 log = logging.getLogger("nmp-sync")
 _run_lock = threading.Lock()
@@ -55,7 +56,8 @@ class Run:
             status = "failed"
         else:
             status = "partial" if self.errors else "ok"
-        summary = f"загружено: {self.uploaded}, привязано: {self.assigned}, ошибок: {self.errors}"
+        summary = message("загружено: {uploaded}, привязано: {assigned}, ошибок: {errors}",
+                          uploaded=self.uploaded, assigned=self.assigned, errors=self.errors)
         db.execute("UPDATE runs SET finished_at=?, status=?, summary=? WHERE id=?",
                    (db.now_iso(), status, summary, self.id))
         keep = int(db.get_setting("keep_runs") or 300)
@@ -91,7 +93,7 @@ class Source:
             except NPMError as e:
                 if self.mode != "auto" or not _ssh_ready(self.m):
                     raise
-                run.ev("warn", f"мастер: список через API не получен ({e}), пробую SSH")
+                run.ev("warn", message("мастер: список через API не получен ({error}), пробую SSH", error=e))
         return [Ref(i) for i in sshsrc.list_certs(*_ssh_args(self.m))]
 
     def fetch(self, ref: Ref, run: Run) -> tuple[bytes, bytes]:
@@ -101,7 +103,7 @@ class Source:
             except NPMError as e:
                 if self.mode != "auto" or not _ssh_ready(self.m):
                     raise
-                run.ev("warn", f"npm-{ref.cert_id}: API download не удался ({e}), беру по SSH")
+                run.ev("warn", message("npm-{id}: API download не удался ({error}), беру по SSH", id=ref.cert_id, error=e))
         return sshsrc.fetch(*_ssh_args(self.m), ref.cert_id)
 
 
@@ -170,10 +172,10 @@ def _sync_to_node(node: Node, cert_id: int, cf: pem.CertFiles, force: bool, run:
         if not node_cert:
             node_cert = node.c.create_custom_certificate(nice)
             node.certs()[node_cert] = {"id": node_cert, "provider": "other", "nice_name": nice}
-            run.ev("info", f"{node.name}: создан сертификат #{node_cert} «{nice}»")
+            run.ev("info", message("{name}: создан сертификат #{id} «{label}»", name=node.name, id=node_cert, label=nice))
         node.c.upload_certificate(node_cert, cf.fullchain, cf.privkey)
         run.uploaded += 1
-        run.ev("info", f"{node.name}: загружен {cf.domains[0]} -> #{node_cert} (до {cf.not_after:%Y-%m-%d %H:%M} UTC)")
+        run.ev("info", message("{name}: загружен {domain} -> #{id} (до {expires:%Y-%m-%d %H:%M} UTC)", name=node.name, domain=cf.domains[0], id=node_cert, expires=cf.not_after))
         _set_state(nid, cert_id, node_cert_id=node_cert, sha=cf.sha, synced_at=db.now_iso())
     if node.s["auto_assign"]:
         for h in node.hosts():
@@ -182,34 +184,36 @@ def _sync_to_node(node: Node, cert_id: int, cf: pem.CertFiles, force: bool, run:
                 node.c.set_proxy_host_certificate(int(h["id"]), node_cert)
                 h["certificate_id"] = node_cert
                 run.assigned += 1
-                run.ev("info", f"{node.name}: прокси-хост #{h['id']} ({', '.join(names)}) -> сертификат #{node_cert}")
+                run.ev("info", message("{name}: прокси-хост #{host_id} ({domains}) -> сертификат #{cert_id}", name=node.name, host_id=h['id'], domains=', '.join(names), cert_id=node_cert))
     _set_state(nid, cert_id, node_cert_id=node_cert, expires_at=cf.not_after.isoformat(),
                status="ok", message="")
 
 
 def run_sync(trigger: str = "manual", force: bool = False) -> int | None:
     """Возвращает id запуска или None, если синхронизация уже идёт."""
+    locale = language()
     if not _run_lock.acquire(blocking=False):
         return None
+    token = current_language.set(locale)
     run = None
     try:
-        run = Run(trigger + (" (force)" if force else ""))
+        run = Run(message(trigger) + (message(" (принудительно)") if force else ""))
         m = db.master()
         if not m:
-            run.finish("мастер-сервер не настроен")
+            run.finish(message("мастер-сервер не настроен"))
             return run.id
         if not m["enabled"]:
-            run.finish(f"мастер «{m['name']}» выключен")
+            run.finish(message("мастер «{name}» выключен", name=m['name']))
             return run.id
         node_rows = db.nodes(only_enabled=True)
         if not node_rows:
-            run.finish("нет включённых нод")
+            run.finish(message("нет включённых нод"))
             return run.id
         try:
             src = Source(m)
             refs = src.list(run)
         except Exception as e:
-            run.finish(f"мастер «{m['name']}»: {e}")
+            run.finish(message("мастер «{name}»: {error}", name=m['name'], error=e))
             return run.id
 
         auto_new = db.get_setting("auto_include_new") == "1"
@@ -226,8 +230,8 @@ def run_sync(trigger: str = "manual", force: bool = False) -> int | None:
                 enabled = 1 if (auto_new and ref.provider != "other") else 0
                 db.execute("INSERT INTO certs(cert_id,domains,provider,enabled,seen_at) VALUES(?,?,?,?,?)",
                            (ref.cert_id, ",".join(domains), ref.provider, enabled, db.now_iso()))
-                run.ev("info", f"найден новый сертификат npm-{ref.cert_id} ({', '.join(domains)})"
-                               + ("" if enabled else " — не включён для синхронизации"))
+                run.ev("info", message("найден новый сертификат npm-{id} ({domains})", id=ref.cert_id, domains=', '.join(domains))
+                               + ("" if enabled else message(" — не включён для синхронизации")))
             else:
                 enabled = row["enabled"]
                 db.execute("UPDATE certs SET domains=?, provider=?, seen_at=? WHERE cert_id=?",
@@ -239,14 +243,14 @@ def run_sync(trigger: str = "manual", force: bool = False) -> int | None:
                 full, key = src.fetch(ref, run)
                 cf = pem.load(full, key)
             except Exception as e:
-                run.ev("error", f"npm-{ref.cert_id} ({domains[0]}): не удалось получить с мастера: {e}")
+                run.ev("error", message("npm-{id} ({domain}): не удалось получить с мастера: {error}", id=ref.cert_id, domain=domains[0], error=e))
                 db.execute("UPDATE certs SET status='error', message=? WHERE cert_id=?", (str(e)[:300], ref.cert_id))
                 continue
             db.execute("UPDATE certs SET domains=?, expires_at=?, status=?, message='' WHERE cert_id=?",
                        (",".join(cf.domains), cf.not_after.isoformat(),
                         "expired" if cf.expired else "ok", ref.cert_id))
             if cf.expired:
-                run.ev("warn", f"npm-{ref.cert_id} ({cf.domains[0]}): истёк {cf.not_after:%Y-%m-%d}, пропущен")
+                run.ev("warn", message("npm-{id} ({domain}): истёк {expires:%Y-%m-%d}, пропущен", id=ref.cert_id, domain=cf.domains[0], expires=cf.not_after))
                 continue
 
             for node in nodes:
@@ -258,7 +262,7 @@ def run_sync(trigger: str = "manual", force: bool = False) -> int | None:
                     _sync_to_node(node, ref.cert_id, cf, force, run)
                 except NPMError as e:
                     msg = str(e)
-                    if "вход" in msg:
+                    if isinstance(e, NPMAuthError):
                         broken_nodes[nid] = msg
                     run.ev("error", f"{node.name}: {cf.domains[0]}: {msg}")
                     _set_state(nid, ref.cert_id, status="error", message=msg[:300])
@@ -269,15 +273,16 @@ def run_sync(trigger: str = "manual", force: bool = False) -> int | None:
         for cid in set(known) - seen:
             db.execute("DELETE FROM certs WHERE cert_id=?", (cid,))
             db.execute("DELETE FROM sync_state WHERE cert_id=?", (cid,))
-            run.ev("info", f"npm-{cid} больше нет на мастере, убран из списка (на нодах не удаляется)")
+            run.ev("info", message("npm-{id} больше нет на мастере, убран из списка (на нодах не удаляется)", id=cid))
         run.finish()
         return run.id
     except Exception as e:  # защита от непредвиденного
         log.exception("sync crashed")
         if run:
-            run.finish(f"внутренняя ошибка: {e.__class__.__name__}: {e}")
+            run.finish(message("внутренняя ошибка: {type}: {error}", type=e.__class__.__name__, error=e))
         return run.id if run else None
     finally:
+        current_language.reset(token)
         _run_lock.release()
 
 

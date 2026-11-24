@@ -18,7 +18,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
 from . import db, sshsrc, sync, vault
-from .npm import NPMError
+from .i18n import LANGUAGES, current_language, language, message, translate
 
 VERSION = "0.1.0"
 BASE = os.path.dirname(__file__)
@@ -76,7 +76,8 @@ def render(request: Request, name: str, **ctx):
     msgs = request.session.pop("flash", [])
     return templates.TemplateResponse(request, name, {
         "csrf": csrf_token(request), "flashes": msgs, "user": request.session.get("user"),
-        "running": sync.is_running(), "path": request.url.path, **ctx})
+        "running": sync.is_running(), "path": request.url.path,
+        "language": current_language.get(), "t": message, **ctx})
 
 
 async def form_checked(request: Request):
@@ -103,7 +104,15 @@ class AuthMiddleware:
             if not scope.get("session", {}).get("user"):
                 await RedirectResponse("/login", status_code=303)(scope, receive, send)
                 return
-        await self.app(scope, receive, send)
+        if scope["type"] != "http" or scope["path"].startswith(("/static", "/health", "/api/status")):
+            await self.app(scope, receive, send)
+            return
+
+        token = current_language.set(language())
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_language.reset(token)
 
 
 # --- вход -----------------------------------------------------------------
@@ -112,7 +121,7 @@ async def login(request: Request):
         return render(request, "login.html")
     form = await form_checked(request)
     if form is None:
-        flash(request, "Сессия устарела, попробуйте ещё раз", "err")
+        flash(request, message("Сессия устарела, попробуйте ещё раз"), "err")
         return redirect("/login")
     user_ok = hmac.compare_digest(str(form.get("username", "")), ADMIN_USER)
     pass_ok = hmac.compare_digest(str(form.get("password", "")).encode(), ADMIN_PASSWORD.encode())
@@ -122,7 +131,7 @@ async def login(request: Request):
         return redirect("/")
     await asyncio.sleep(1.5)
     log.warning("неудачный вход для %r с %s", form.get("username"), request.client.host if request.client else "?")
-    flash(request, "Неверный логин или пароль", "err")
+    flash(request, message("Неверный логин или пароль"), "err")
     return redirect("/login")
 
 
@@ -152,9 +161,10 @@ async def sync_now(request: Request):
         return redirect("/")
     force = form.get("force") == "1"
     if sync.start_background("вручную", force=force):
-        flash(request, "Синхронизация запущена" + (" (принудительная перезагрузка всех сертификатов)" if force else ""))
+        notice = message("Синхронизация запущена, все сертификаты будут загружены заново") if force else message("Синхронизация запущена")
+        flash(request, notice)
     else:
-        flash(request, "Синхронизация уже выполняется", "warn")
+        flash(request, message("Синхронизация уже выполняется"), "warn")
     return redirect("/")
 
 
@@ -185,33 +195,33 @@ async def server_edit(request: Request):
     checks = {k: 1 if form.get(k) else 0 for k in ("verify_tls", "enabled", "auto_assign")}
     errors = []
     if not f["name"]:
-        errors.append("Укажите название")
+        errors.append(message("Укажите название"))
     if not f["url"].startswith(("http://", "https://")) or len(f["url"]) < 10:
-        errors.append("Адрес должен начинаться с http:// или https://")
+        errors.append(message("Адрес должен начинаться с http:// или https://"))
     if f["role"] not in ("master", "node"):
-        errors.append("Неверная роль")
+        errors.append(message("Неверная роль"))
     if f["role"] == "node" or f["fetch_mode"] not in ("api", "auto", "ssh"):
         f["fetch_mode"] = "api"
     needs_api = f["role"] == "node" or f["fetch_mode"] in ("api", "auto")
     has_pass = bool(f["password"] or srv["password_enc"])
     if needs_api and (not f["username"] or not has_pass):
-        errors.append("Для API нужны логин (email) и пароль администратора NPMplus")
+        errors.append(message("Для API нужны логин (email) и пароль администратора NPMplus"))
     if f["role"] == "master":
         other = db.one("SELECT id,name FROM servers WHERE role='master' AND id IS NOT ?", (srv["id"],))
         if other:
-            errors.append(f"Мастер уже назначен: «{other['name']}». Сначала переведите его в ноды.")
+            errors.append(message("Мастер уже назначен: «{name}». Сначала переведите его в ноды.", name=other['name']))
         if f["fetch_mode"] in ("auto", "ssh"):
             if not f["ssh_host"]:
-                errors.append("Для SSH укажите хост")
+                errors.append(message("Для SSH укажите хост"))
             if not (f["ssh_key"] or srv["ssh_key_enc"]):
-                errors.append("Для SSH вставьте закрытый ключ")
+                errors.append(message("Для SSH вставьте закрытый ключ"))
             if f["ssh_key"] and "PRIVATE KEY" not in f["ssh_key"]:
-                errors.append("Ключ SSH должен быть в формате OpenSSH/PEM (-----BEGIN ... PRIVATE KEY-----)")
+                errors.append(message("Ключ SSH должен быть в формате OpenSSH/PEM (-----BEGIN ... PRIVATE KEY-----)"))
     try:
         port = int(f["ssh_port"] or 22)
         assert 1 <= port <= 65535
     except (ValueError, AssertionError):
-        errors.append("Неверный порт SSH")
+        errors.append(message("Неверный порт SSH"))
         port = 22
     if errors:
         srv.update({k: v for k, v in f.items() if k in srv}, **checks, ssh_port=f["ssh_port"])
@@ -229,7 +239,7 @@ async def server_edit(request: Request):
         guard = sync.pause_sync() if node_url_changed else contextlib.nullcontext(True)
         with guard as can_update:
             if not can_update:
-                flash(request, "Дождитесь завершения синхронизации перед сменой адреса ноды", "warn")
+                flash(request, message("Дождитесь завершения синхронизации перед сменой адреса ноды"), "warn")
                 return redirect(f"/servers/{srv['id']}")
             db.update_server(srv["id"], vals, node_url_changed)
     else:
@@ -237,7 +247,7 @@ async def server_edit(request: Request):
                    "fetch_mode,ssh_host,ssh_port,ssh_user,ssh_key_enc) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)
     if becomes_master or stops_master:
         db.reset_master_state()
-    flash(request, f"Сервер «{f['name']}» сохранён")
+    flash(request, message("Сервер «{name}» сохранён", name=f['name']))
     return redirect("/servers")
 
 
@@ -250,7 +260,7 @@ async def server_delete(request: Request):
         db.execute("DELETE FROM sync_state WHERE node_id=?", (sid,))
         if srv["role"] == "master":
             db.reset_master_state()
-        flash(request, f"Сервер «{srv['name']}» удалён. Сертификаты на самом сервере не тронуты.")
+        flash(request, message("Сервер «{name}» удалён. Сертификаты на самом сервере не тронуты.", name=srv['name']))
     return redirect("/servers")
 
 
@@ -261,21 +271,21 @@ def _test_server(srv: dict) -> tuple[bool, str]:
         try:
             c = sync.client_for(srv)
             certs = c.list_certificates()
-            parts.append(f"API: вход выполнен, сертификатов {len(certs)}")
+            parts.append(message("API: вход выполнен, сертификатов {count}", count=len(certs)))
             if srv["role"] == "master":
                 acme = [x for x in certs if x.get("provider") != "other"]
                 if acme:
                     c.download_certificate(int(acme[0]["id"]))
-                    parts.append(f"скачивание npm-{acme[0]['id']} работает")
+                    parts.append(message("скачивание npm-{id} работает", id=acme[0]['id']))
             else:
-                parts.append(f"прокси-хостов {len(c.list_proxy_hosts())}")
+                parts.append(message("прокси-хостов {count}", count=len(c.list_proxy_hosts())))
         except Exception as e:
             ok = srv["fetch_mode"] == "auto" and srv["role"] == "master"
             parts.append(f"API: {e}")
     if srv["role"] == "master" and srv["fetch_mode"] in ("auto", "ssh"):
         try:
             ids = sshsrc.list_certs(*sync._ssh_args(srv))
-            parts.append(f"SSH: cert-export list вернул {len(ids)} сертификатов")
+            parts.append(message("SSH: cert-export list вернул {count} сертификатов", count=len(ids)))
         except Exception as e:
             ok = False
             parts.append(f"SSH: {e}")
@@ -299,7 +309,7 @@ async def certs(request: Request):
             ids = {int(x) for x in form.getlist("enabled")}
             for c in db.query("SELECT cert_id FROM certs"):
                 db.execute("UPDATE certs SET enabled=? WHERE cert_id=?", (1 if c["cert_id"] in ids else 0, c["cert_id"]))
-            flash(request, "Выбор сертификатов сохранён")
+            flash(request, message("Выбор сертификатов сохранён"))
         return redirect("/certs")
     return render(request, "certs.html", certs=db.query("SELECT * FROM certs ORDER BY domains"), master=db.master())
 
@@ -325,11 +335,15 @@ async def settings(request: Request):
             db.set_setting("interval_minutes", str(iv))
             db.set_setting("auto_include_new", "1" if form.get("auto_include_new") else "0")
             SCHED["next"] = time.time() + iv * 60 if SCHED.get("next") else None
-            flash(request, "Настройки сохранены")
+            selected = form.get("language")
+            if isinstance(selected, str) and selected in LANGUAGES:
+                db.set_setting("language", selected)
+                current_language.set(selected)
+            flash(request, message("Настройки сохранены"))
         return redirect("/settings")
     return render(request, "settings.html", interval=db.get_setting("interval_minutes"),
                   auto_new=db.get_setting("auto_include_new") == "1",
-                  status_token=bool(STATUS_TOKEN))
+                  languages=LANGUAGES, status_token=bool(STATUS_TOKEN))
 
 
 # --- служебное ------------------------------------------------------------
@@ -380,7 +394,8 @@ async def scheduler():
 @contextlib.asynccontextmanager
 async def lifespan(app):
     db.init()
-    db.execute("UPDATE runs SET status='failed', summary='прервано перезапуском' WHERE status='running'")
+    db.execute("UPDATE runs SET status='failed', summary=? WHERE status='running'",
+               (translate(language(), "прервано перезапуском"),))
     task = asyncio.create_task(scheduler())
     log.info("NMP Sync %s запущен", VERSION)
     yield

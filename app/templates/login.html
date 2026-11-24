@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Вход — NMP Sync{% endblock %}
+{% block title %}{{ t("Вход") }} — NMP Sync{% endblock %}
 {% block content %}
 <div class="card narrow">
   <h1>NMP Sync</h1>
-  <p class="muted">Синхронизация сертификатов между серверами NPMplus</p>
+  <p class="muted">{{ t("Синхронизация сертификатов между серверами NPMplus") }}</p>
   <form method="post" action="/login">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Логин<input name="username" autocomplete="username" required autofocus></label>
-    <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
-    <button class="primary">Войти</button>
+    <label>{{ t("Логин") }}<input name="username" autocomplete="username" required autofocus></label>
+    <label>{{ t("Пароль") }}<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary">{{ t("Войти") }}</button>
   </form>
 </div>
 {% endblock %}

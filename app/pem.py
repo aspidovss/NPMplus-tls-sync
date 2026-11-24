@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from .i18n import message
 
 
 @dataclass
@@ -27,13 +28,13 @@ def _spki(key) -> bytes:
 
 def load(fullchain: bytes, privkey: bytes) -> CertFiles:
     if b"BEGIN CERTIFICATE" not in fullchain:
-        raise ValueError("fullchain не содержит сертификата")
+        raise ValueError(message("fullchain не содержит сертификата"))
     if b"PRIVATE KEY" not in privkey:
-        raise ValueError("privkey не содержит закрытого ключа")
+        raise ValueError(message("privkey не содержит закрытого ключа"))
     cert = x509.load_pem_x509_certificate(fullchain)  # первый сертификат цепочки
     key = serialization.load_pem_private_key(privkey, password=None)
     if _spki(cert.public_key()) != _spki(key.public_key()):
-        raise ValueError("закрытый ключ не соответствует сертификату")
+        raise ValueError(message("закрытый ключ не соответствует сертификату"))
     domains: list[str] = []
     try:
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)

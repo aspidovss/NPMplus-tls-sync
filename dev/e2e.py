@@ -42,28 +42,43 @@ def node():
 
 # вход
 r = post("/login", {"username": "admin", "password": "wrong"}, "/login")
-check("Неверный логин" in r.text, "неверный пароль отклонён")
+check("Invalid username or password" in r.text, "неверный пароль отклонён")
 r = post("/login", {"username": "admin", "password": "adminpass1"}, "/login")
-check("Обзор" in r.text, "вход выполнен")
+check("Overview" in r.text, "вход выполнен")
 check(s.post(APP + "/sync", data={"csrf": "bad"}).url.endswith("/"), "POST без CSRF не запускает синхронизацию")
+
+# Выбранный язык сохраняется, действует на странице входа и проверяется при сохранении.
+def set_language(value):
+    return post("/settings", {"language": value, "interval_minutes": "60", "auto_include_new": "on"})
+
+
+check('<html lang="en">' in r.text, "английский выбран по умолчанию")
+r = set_language("ru")
+check('<html lang="ru">' in r.text and "Язык интерфейса" in r.text and "Настройки сохранены" in r.text,
+      "настройки переключаются на русский")
+check('<html lang="ru">' in requests.get(APP + "/login").text, "язык сохраняется вне текущей сессии")
+check('<html lang="ru">' in set_language("unknown").text, "неподдерживаемый язык не сохраняется")
+r = set_language("en")
+check('<html lang="en">' in r.text and "Interface language" in r.text and "Settings saved" in r.text,
+      "настройки переключаются обратно на английский")
 
 # серверы
 r = post("/servers/new", {"name": "VM", "role": "master", "url": "http://127.0.0.1:9001",
                           "username": "admin@example.com", "password": "secret123", "fetch_mode": "api",
                           "enabled": "on", "ssh_port": "22", "ssh_user": "root"}, "/servers/new")
-check("сохранён" in r.text, "мастер добавлен")
+check("saved" in r.text, "мастер добавлен")
 r = post("/servers/new", {"name": "VM2", "role": "master", "url": "http://127.0.0.1:9003",
                           "username": "x", "password": "y", "fetch_mode": "api", "enabled": "on",
                           "ssh_port": "22"}, "/servers/new")
-check("Мастер уже назначен" in r.text, "второй мастер запрещён")
+check("is already the master" in r.text, "второй мастер запрещён")
 r = post("/servers/new", {"name": "DietPi", "role": "node", "url": "http://127.0.0.1:9002",
                           "username": "admin@example.com", "password": "secret123", "enabled": "on",
                           "auto_assign": "on", "ssh_port": "22"}, "/servers/new")
-check("сохранён" in r.text, "нода добавлена")
+check("saved" in r.text, "нода добавлена")
 r = post("/servers/1/test", {}, "/servers")
-check("скачивание npm-2 работает" in r.text, "проверка мастера: " + re.search(r'class="flash[^"]*">([^<]+)', r.text).group(1))
+check("Downloaded npm-2" in r.text, "проверка мастера: " + re.search(r'class="flash[^"]*">([^<]+)', r.text).group(1))
 r = post("/servers/2/test", {}, "/servers")
-check("прокси-хостов 4" in r.text, "проверка ноды: " + re.search(r'class="flash[^"]*">([^<]+)', r.text).group(1))
+check("Proxy hosts: 4" in r.text, "проверка ноды: " + re.search(r'class="flash[^"]*">([^<]+)', r.text).group(1))
 
 # 1-я синхронизация
 post("/sync", {}, "/")
@@ -110,7 +125,7 @@ check('value="4" checked' not in html and 'value="2" checked' in html, "выбо
 post("/sync", {"force": "1"}, "/")
 st = wait_sync()
 print("   force:", st["last_run"]["summary"])
-check("загружено: 3" in st["last_run"]["summary"], "принудительный запуск перезагрузил 3 включённых действующих")
+check("Uploaded: 3" in st["last_run"]["summary"], "принудительный запуск перезагрузил 3 включённых действующих")
 
 # статус для мониторинга
 st = s.get(APP + "/api/status").json()
@@ -141,7 +156,7 @@ replacement = {"name": "DietPi", "role": "node", "url": "http://localhost:9002",
 post("/servers/2", replacement, "/servers/2")
 post("/sync", {}, "/")
 st = wait_sync()
-check(st["last_run"]["status"] == "ok" and "загружено: 3" in st["last_run"]["summary"],
+check(st["last_run"]["status"] == "ok" and "Uploaded: 3" in st["last_run"]["summary"],
       "после смены адреса ноды действующие сертификаты загружены заново")
 
 # неверный пароль ноды -> ошибка в статусе, мастер не ломается

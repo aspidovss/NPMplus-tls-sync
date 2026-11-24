@@ -2,45 +2,45 @@
 {% block content %}
 <div class="card">
   <div class="head">
-    <h1>Обзор</h1>
+    <h1>{{ t("Обзор") }}</h1>
     <div class="actions">
       <form method="post" action="/sync">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="primary" {{ 'disabled' if running }}>{{ 'Идёт синхронизация…' if running else 'Синхронизировать сейчас' }}</button>
+        <button class="primary" {{ 'disabled' if running }}>{{ t("Идёт синхронизация…") if running else t("Синхронизировать сейчас") }}</button>
       </form>
-      <form method="post" action="/sync" onsubmit="return confirm('Перезагрузить все сертификаты на все ноды, даже без изменений?')">
+      <form method="post" action="/sync" onsubmit="return confirm(this.dataset.confirm)" data-confirm="{{ t("Перезагрузить все сертификаты на все ноды, даже без изменений?") }}">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="force" value="1">
-        <button {{ 'disabled' if running }}>Принудительно</button>
+        <button {{ 'disabled' if running }}>{{ t("Принудительно") }}</button>
       </form>
     </div>
   </div>
 
   <div class="summary">
-    <div><span class="muted">Мастер</span>
+    <div><span class="muted">{{ t("Мастер") }}</span>
       {% if master %}<a href="/servers/{{ master.id }}">{{ master.name }}</a>
-        {% if not master.enabled %}<span class="badge warn">выключен</span>{% endif %}
-      {% else %}<a href="/servers/new">не настроен</a>{% endif %}</div>
-    <div><span class="muted">Нод</span>{{ nodes|selectattr('enabled')|list|length }} из {{ nodes|length }}</div>
-    <div><span class="muted">Последний запуск</span>
+        {% if not master.enabled %}<span class="badge warn">{{ t("выключен") }}</span>{% endif %}
+      {% else %}<a href="/servers/new">{{ t("не настроен") }}</a>{% endif %}</div>
+    <div><span class="muted">{{ t("Нод") }}</span>{{ nodes|selectattr('enabled')|list|length }} {{ t("из") }} {{ nodes|length }}</div>
+    <div><span class="muted">{{ t("Последний запуск") }}</span>
       {% if last %}<a href="/logs?run={{ last.id }}">{{ last.started_at|dt }}</a>
-        <span class="badge {{ {'ok':'ok','partial':'warn','failed':'err','running':'info'}.get(last.status, '') }}">{{ {'ok':'успешно','partial':'с ошибками','failed':'ошибка','running':'идёт'}.get(last.status, last.status) }}</span>
+        <span class="badge {{ {'ok':'ok','partial':'warn','failed':'err','running':'info'}.get(last.status, '') }}">{{ {'ok':t("успешно"),'partial':t("с ошибками"),'failed':t("ошибка"),'running':t("идёт")}.get(last.status, last.status) }}</span>
         <div class="muted small">{{ last.summary or '' }}</div>
       {% else %}—{% endif %}</div>
-    <div><span class="muted">Следующий по расписанию</span>{% if next_run %}<span data-ts="{{ next_run|int }}" class="ts"></span>{% else %}—{% endif %}</div>
+    <div><span class="muted">{{ t("Следующий по расписанию") }}</span>{% if next_run %}<span data-ts="{{ next_run|int }}" class="ts"></span>{% else %}—{% endif %}</div>
   </div>
 </div>
 
 <div class="card">
   {% if not master or not nodes %}
-    <p>Добавьте <a href="/servers/new">мастер-сервер и хотя бы одну ноду</a>, затем запустите синхронизацию.</p>
+    <p>{{ t("Добавьте") }} <a href="/servers/new">{{ t("мастер-сервер и хотя бы одну ноду") }}</a>{{ t(", затем запустите синхронизацию.") }}</p>
   {% elif not certs %}
-    <p>Список сертификатов мастера ещё не получен. Нажмите «Синхронизировать сейчас».</p>
+    <p>{{ t("Список сертификатов мастера ещё не получен. Нажмите «Синхронизировать сейчас».") }}</p>
   {% else %}
   <table>
     <thead><tr>
-      <th>Сертификат</th><th>На мастере</th><th>Действует до</th>
-      {% for n in nodes %}<th>{{ n.name }}{% if not n.enabled %} <span class="muted">(выкл.)</span>{% endif %}</th>{% endfor %}
+      <th>{{ t("Сертификат") }}</th><th>{{ t("На мастере") }}</th><th>{{ t("Действует до") }}</th>
+      {% for n in nodes %}<th>{{ n.name }}{% if not n.enabled %} <span class="muted">{{ t("(выкл.)") }}</span>{% endif %}</th>{% endfor %}
     </tr></thead>
     <tbody>
     {% for c in certs %}
@@ -48,21 +48,21 @@
       <tr class="{{ '' if c.enabled else 'off' }}">
         <td><strong>{{ c.domains.split(',')[0] }}</strong>
           {% if c.domains.split(',')|length > 1 %}<span class="muted small"> +{{ c.domains.split(',')|length - 1 }}</span>{% endif %}
-          {% if not c.enabled %}<span class="badge">не синхронизируется</span>{% endif %}</td>
+          {% if not c.enabled %}<span class="badge">{{ t("не синхронизируется") }}</span>{% endif %}</td>
         <td class="muted">npm-{{ c.cert_id }}</td>
-        <td>{% if c.status == 'expired' %}<span class="badge err">истёк</span>
-            {% elif c.status == 'error' %}<span class="badge err" title="{{ c.message }}">ошибка мастера</span>
+        <td>{% if c.status == 'expired' %}<span class="badge err">{{ t("истёк") }}</span>
+            {% elif c.status == 'error' %}<span class="badge err" title="{{ c.message }}">{{ t("ошибка мастера") }}</span>
             {% elif dl is not none %}<span class="{{ 'err' if dl < 2 else 'warn' if dl < 4 else '' }}">{{ c.expires_at|dt }}</span>
-            <span class="muted small">({{ '%.1f'|format(dl) }} дн.)</span>
+            <span class="muted small">({{ '%.1f'|format(dl) }} {{ t("дн.") }})</span>
             {% else %}—{% endif %}</td>
         {% for n in nodes %}
           {% set s = states.get((n.id, c.cert_id)) %}
           <td>
           {% if not c.enabled or c.status in ('expired',) %}<span class="muted">—</span>
-          {% elif not s or not s.status %}<span class="badge">ожидает</span>
-          {% elif s.status == 'ok' %}<span class="badge ok" title="Сертификат #{{ s.node_cert_id }} на ноде">✓ #{{ s.node_cert_id }}</span>
+          {% elif not s or not s.status %}<span class="badge">{{ t("ожидает") }}</span>
+          {% elif s.status == 'ok' %}<span class="badge ok" title="{{ t("Сертификат #{id} на ноде", id=s.node_cert_id) }}">✓ #{{ s.node_cert_id }}</span>
             <div class="muted small">{{ s.synced_at|dt }}</div>
-          {% else %}<span class="badge err" title="{{ s.message }}">ошибка</span>
+          {% else %}<span class="badge err" title="{{ s.message }}">{{ t("ошибка") }}</span>
             <div class="muted small err-text">{{ s.message[:80] }}</div>{% endif %}
           </td>
         {% endfor %}
@@ -70,13 +70,13 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted small">Время загрузки — когда файлы последний раз отправлялись на ноду. Если сертификат не менялся, повторной загрузки нет.</p>
+  <p class="muted small">{{ t("Время загрузки — когда файлы последний раз отправлялись на ноду. Если сертификат не менялся, повторной загрузки нет.") }}</p>
   {% endif %}
 </div>
 <script>
 document.querySelectorAll('.ts').forEach(e => {
   const d = new Date(parseInt(e.dataset.ts) * 1000);
-  e.textContent = d.toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+  e.textContent = d.toLocaleString(document.documentElement.lang, {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
 });
 </script>
 {% endblock %}

@@ -11,6 +11,8 @@ import subprocess
 import tarfile
 import tempfile
 
+from .i18n import message
+
 KNOWN_HOSTS = os.path.join(os.path.dirname(os.environ.get("DB_PATH", "/data/nmpsync.db")), "known_hosts")
 
 
@@ -20,7 +22,7 @@ class SSHError(Exception):
 
 def _run(host: str, port: int, user: str, key_pem: str, command: str, timeout: int = 60) -> bytes:
     if not host or not key_pem:
-        raise SSHError("SSH не настроен: нет хоста или ключа")
+        raise SSHError(message("SSH не настроен: нет хоста или ключа"))
     key = key_pem.replace("\r\n", "\n").strip() + "\n"
     with tempfile.TemporaryDirectory() as tmp:
         kf = os.path.join(tmp, "id")
@@ -36,12 +38,12 @@ def _run(host: str, port: int, user: str, key_pem: str, command: str, timeout: i
         try:
             p = subprocess.run(cmd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
         except FileNotFoundError as e:
-            raise SSHError("нет ssh-клиента в контейнере") from e
+            raise SSHError(message("нет ssh-клиента в контейнере")) from e
         except subprocess.TimeoutExpired as e:
-            raise SSHError(f"ssh {command}: таймаут") from e
+            raise SSHError(message("ssh {command}: таймаут", command=command)) from e
     if p.returncode != 0:
         err = p.stderr.decode(errors="replace").strip()[-300:]
-        raise SSHError(f"ssh {command}: код {p.returncode}: {err}")
+        raise SSHError(message("ssh {command}: код {code}: {error}", command=command, code=p.returncode, error=err))
     return p.stdout
 
 
@@ -65,7 +67,7 @@ def fetch(host, port, user, key_pem, cert_id: int) -> tuple[bytes, bytes]:
                 if m.isfile() and name in ("fullchain.pem", "privkey.pem") and m.size < 1_000_000:
                     files[name] = t.extractfile(m).read()
     except tarfile.TarError as e:
-        raise SSHError(f"npm-{cert_id}: некорректный tar") from e
+        raise SSHError(message("npm-{id}: некорректный tar", id=cert_id)) from e
     if "fullchain.pem" not in files or "privkey.pem" not in files:
-        raise SSHError(f"npm-{cert_id}: в архиве нет fullchain.pem/privkey.pem")
+        raise SSHError(message("npm-{id}: в архиве нет fullchain.pem/privkey.pem", id=cert_id))
     return files["fullchain.pem"], files["privkey.pem"]

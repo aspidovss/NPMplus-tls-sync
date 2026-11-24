@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="{{ language }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,15 +12,15 @@
 <header class="top">
   <div class="brand">NMP&nbsp;Sync</div>
   <nav>
-    <a href="/" class="{{ 'active' if path == '/' }}">Обзор</a>
-    <a href="/servers" class="{{ 'active' if path.startswith('/servers') }}">Серверы</a>
-    <a href="/certs" class="{{ 'active' if path == '/certs' }}">Сертификаты</a>
-    <a href="/logs" class="{{ 'active' if path == '/logs' }}">Журнал</a>
-    <a href="/settings" class="{{ 'active' if path == '/settings' }}">Настройки</a>
+    <a href="/" class="{{ 'active' if path == '/' }}">{{ t("Обзор") }}</a>
+    <a href="/servers" class="{{ 'active' if path.startswith('/servers') }}">{{ t("Серверы") }}</a>
+    <a href="/certs" class="{{ 'active' if path == '/certs' }}">{{ t("Сертификаты") }}</a>
+    <a href="/logs" class="{{ 'active' if path == '/logs' }}">{{ t("Журнал") }}</a>
+    <a href="/settings" class="{{ 'active' if path == '/settings' }}">{{ t("Настройки") }}</a>
   </nav>
   <form method="post" action="/logout" class="logout">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button class="link">Выйти ({{ user }})</button>
+    <button class="link">{{ t("Выйти") }} ({{ user }})</button>
   </form>
 </header>
 {% endif %}

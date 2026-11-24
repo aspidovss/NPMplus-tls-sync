@@ -1,25 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card form">
-  <h1>Настройки</h1>
+  <h1>{{ t("Настройки") }}</h1>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Интервал синхронизации, минут
+    <label>{{ t("Язык интерфейса") }}
+      <select name="language">
+        {% for code, label in languages.items() %}
+          <option value="{{ code }}" lang="{{ code }}" {{ 'selected' if code == language }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>{{ t("Интервал синхронизации, минут") }}
       <input name="interval_minutes" type="number" min="5" max="1440" value="{{ interval }}">
-      <span class="hint">От 5 до 1440. Если сертификат на мастере не менялся, на ноды ничего не отправляется.</span></label>
+      <span class="hint">{{ t("От 5 до 1440. Если сертификат на мастере не менялся, на ноды ничего не отправляется.") }}</span></label>
     <label class="inline"><input type="checkbox" name="auto_include_new" {{ 'checked' if auto_new }}>
-      Новые сертификаты мастера синхронизировать автоматически
-      <span class="hint">Если выключено, новый сертификат появится в списке, но его нужно будет включить вручную.</span></label>
-    <div class="actions"><button class="primary">Сохранить</button></div>
+      {{ t("Новые сертификаты мастера синхронизировать автоматически") }}
+      <span class="hint">{{ t("Если выключено, новый сертификат появится в списке, но его нужно будет включить вручную.") }}</span></label>
+    <div class="actions"><button class="primary">{{ t("Сохранить") }}</button></div>
   </form>
 </div>
 <div class="card form">
-  <h2>Мониторинг</h2>
-  <p>JSON со статусом: <code>GET /api/status</code>. Подходит для HTTP-агента Zabbix: поля <code>errors</code>, <code>min_days_left</code>, <code>last_run.status</code>.</p>
+  <h2>{{ t("Мониторинг") }}</h2>
+  <p>{{ t("JSON со статусом:") }} <code>GET /api/status</code>{{ t(". Подходит для HTTP-агента Zabbix: поля") }} <code>errors</code>, <code>min_days_left</code>, <code>last_run.status</code>.</p>
   {% if status_token %}
-    <p class="muted">Токен задан через <code>STATUS_TOKEN</code>; передавайте его в заголовке <code>X-Token</code>.</p>
+    <p class="muted">{{ t("Токен задан через") }} <code>STATUS_TOKEN</code>{{ t("; передавайте его в заголовке") }} <code>X-Token</code>.</p>
   {% else %}
-    <p class="muted">Переменная <code>STATUS_TOKEN</code> не задана — эндпоинт доступен только после входа в интерфейс.</p>
+    <p class="muted">{{ t("Переменная") }} <code>STATUS_TOKEN</code> {{ t("не задана — эндпоинт доступен только после входа в интерфейс.") }}</p>
   {% endif %}
 </div>
 {% endblock %}
