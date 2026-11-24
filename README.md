@@ -13,8 +13,8 @@ instances are **nodes**, which receive them as custom certificates named
 ## Features
 
 - Configure server roles, API credentials, and TLS verification from the web interface.
-- Download certificates from the master through the API, over SSH, or through
-  the API with SSH as a fallback.
+- Download certificates from the master through the NPMplus admin API, over
+  SSH, or through the admin API with SSH as a fallback.
 - Choose which certificates to sync. New certificates are enabled automatically
   by default, except for custom certificates discovered through the API.
   Expired certificates are skipped.
@@ -26,6 +26,16 @@ instances are **nodes**, which receive them as custom certificates named
   a proxy host must be covered, including wildcard matches.
 - Run on a schedule (5–1440 minutes), sync on demand, or force a re-upload.
   Review the results in the run log or through the monitoring endpoint.
+
+## NPMplus compatibility
+
+The reference version is
+[NPMplus 2026-11-18-r1](https://github.com/ZoeyVid/NPMplus/releases/tag/2026-11-18-r1).
+Its [certificate download and upload routes](https://github.com/ZoeyVid/NPMplus/blob/2026-11-18-r1/backend/routes/nginx/certificates.js#L228-L318)
+match the endpoints used by the sync service. Automated synchronization tests
+use mock NPM servers. End-to-end compatibility with this NPMplus release
+still needs to be verified on a running instance. No minimum supported
+version has been established.
 
 ## Screenshots
 
@@ -69,8 +79,11 @@ The web interface is shown below with sample servers and certificates.
 4. Open `http://<docker-host>:8090` and sign in.
 5. Add the master and nodes on the **Servers** page. Enter each
    instance's admin URL, such as `https://192.168.0.2:81`, and its NPMplus
-   administrator credentials. Keep TLS verification enabled when the endpoint
-   has a certificate trusted by the container.
+   administrator credentials. Use the same base URL you use to open the
+   NPMplus web interface. The sync service adds `/api` to call the admin API.
+   Keep TLS verification enabled when the endpoint has a certificate trusted
+   by the container. The NPMplus README lists Swagger UI at `/swagger` on the
+   same admin interface. [NPMplus documentation](https://github.com/ZoeyVid/NPMPlus#list-of-some-changes)
 6. Use **Test** on each server. The master's API check tries to
    download one certificate when a non-custom certificate is available. If the
    API cannot download it, configure the SSH fallback below.

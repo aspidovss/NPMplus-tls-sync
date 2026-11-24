@@ -14,9 +14,9 @@
       <label class="inline"><input type="radio" name="role" value="node" {{ 'checked' if s.role == 'node' }}> {{ t("Нода — сюда загружаются сертификаты") }}</label>
     </fieldset>
 
-    <label>{{ t("Адрес API NPMplus") }}
+    <label>{{ t("Адрес админки NPMplus") }}
       <input name="url" value="{{ s.url }}" required placeholder="https://192.168.0.2:81">
-      <span class="hint">{{ t("Адрес админки NPMplus, обычно https://IP:81. Путь /api добавляется сам.") }}</span></label>
+      <span class="hint">{{ t("Введите адрес веб-интерфейса, например https://192.168.0.2:81. Синхронизатор сам добавит /api.") }}</span></label>
     <label class="inline"><input type="checkbox" name="verify_tls" {{ 'checked' if s.verify_tls }}> {{ t("Проверять TLS-сертификат админки") }}
       <span class="hint">{{ t("Выключите для самоподписанного сертификата на порту 81.") }}</span></label>
 
