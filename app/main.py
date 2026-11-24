@@ -225,11 +225,13 @@ async def server_edit(request: Request):
     becomes_master = f["role"] == "master" and (srv["role"] != "master" or srv["url"] != f["url"].rstrip("/"))
     stops_master = srv["id"] and srv["role"] == "master" and f["role"] != "master"
     if srv["id"]:
-        db.execute("UPDATE servers SET name=?,url=?,username=?,password_enc=?,verify_tls=?,role=?,enabled=?,"
-                   "auto_assign=?,fetch_mode=?,ssh_host=?,ssh_port=?,ssh_user=?,ssh_key_enc=? WHERE id=?",
-                   (*vals, srv["id"]))
-        if srv["role"] == "node" and f["role"] == "master":
-            db.execute("DELETE FROM sync_state WHERE node_id=?", (srv["id"],))
+        node_url_changed = srv["role"] == f["role"] == "node" and srv["url"] != vals[1]
+        guard = sync.pause_sync() if node_url_changed else contextlib.nullcontext(True)
+        with guard as can_update:
+            if not can_update:
+                flash(request, "Дождитесь завершения синхронизации перед сменой адреса ноды", "warn")
+                return redirect(f"/servers/{srv['id']}")
+            db.update_server(srv["id"], vals, node_url_changed)
     else:
         db.execute("INSERT INTO servers(name,url,username,password_enc,verify_tls,role,enabled,auto_assign,"
                    "fetch_mode,ssh_host,ssh_port,ssh_user,ssh_key_enc) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)

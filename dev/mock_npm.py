@@ -128,12 +128,15 @@ def build(role, auth):
                 return JSONResponse(h)
         return JSONResponse({"error": "not found"}, 404)
 
-    async def debug(req: Request):  # для теста: состояние и ротация сертификата мастера
+    async def debug(req: Request):  # состояние и изменения сертификатов для тестов
         if req.method == "POST":
             d = await req.json()
             c = state["certs"][d["cid"]]
-            c["_full"], c["_key"], na = make_cert(c["domain_names"], d.get("days", 6))
-            c["expires_on"] = na.strftime("%Y-%m-%d %H:%M:%S")
+            if "nice_name" in d:
+                c["nice_name"] = d["nice_name"]
+            else:
+                c["_full"], c["_key"], na = make_cert(c["domain_names"], d.get("days", 6))
+                c["expires_on"] = na.strftime("%Y-%m-%d %H:%M:%S")
         return JSONResponse({"certs": [{**pub(c), "uploads": c.get("_uploads", 0)} for c in state["certs"].values()],
                              "hosts": state["hosts"]})
 

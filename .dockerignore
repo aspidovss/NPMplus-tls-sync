@@ -6,4 +6,5 @@ data/
 **/__pycache__
 *.db*
 README.md
+/docs/
 /*.html

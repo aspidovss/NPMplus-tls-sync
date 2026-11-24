@@ -118,6 +118,15 @@ def get_setting(key: str) -> str:
     return row["value"] if row else DEFAULT_SETTINGS.get(key, "")
 
 
+def update_server(sid: int, values: tuple, reset_node_state: bool) -> None:
+    with _lock, _db() as c:
+        c.execute("UPDATE servers SET name=?,url=?,username=?,password_enc=?,verify_tls=?,role=?,enabled=?,"
+                  "auto_assign=?,fetch_mode=?,ssh_host=?,ssh_port=?,ssh_user=?,ssh_key_enc=? WHERE id=?",
+                  (*values, sid))
+        if reset_node_state:
+            c.execute("DELETE FROM sync_state WHERE node_id=?", (sid,))
+
+
 def set_setting(key: str, value: str) -> None:
     execute("INSERT INTO settings(key,value) VALUES(?,?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))

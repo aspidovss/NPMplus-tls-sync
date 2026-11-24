@@ -1,6 +1,7 @@
 """Движок синхронизации: мастер -> ноды."""
 import logging
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -14,6 +15,16 @@ NICE_PREFIX = "sync: "
 
 def is_running() -> bool:
     return _run_lock.locked()
+
+
+@contextmanager
+def pause_sync():
+    acquired = _run_lock.acquire(blocking=False)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            _run_lock.release()
 
 
 @dataclass
@@ -145,10 +156,12 @@ def _sync_to_node(node: Node, cert_id: int, cf: pem.CertFiles, force: bool, run:
     nid = node.s["id"]
     nice = NICE_PREFIX + cf.domains[0]
     state = db.one("SELECT * FROM sync_state WHERE node_id=? AND cert_id=?", (nid, cert_id)) or {}
-    node_cert = state.get("node_cert_id")
-    if node_cert not in node.certs():
+    saved_id = state.get("node_cert_id")
+    node_cert = saved_id
+    saved_cert = node.certs().get(saved_id, {})
+    if saved_cert.get("provider") != "other" or saved_cert.get("nice_name") != nice:
         node_cert = node.find_by_name(nice)  # подхватываем ранее созданные (в т.ч. старым certsync)
-    need = force or not node_cert or state.get("sha") != cf.sha
+    need = force or not node_cert or node_cert != saved_id or state.get("sha") != cf.sha
     if not need:
         exp = _parse_dt(node.certs()[node_cert].get("expires_on"))
         if exp and abs((exp - cf.not_after).total_seconds()) > 86400:

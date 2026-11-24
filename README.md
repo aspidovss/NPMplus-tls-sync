@@ -23,6 +23,22 @@ instances are **nodes**, which receive them as custom certificates named
 - Run on a schedule (5–1440 minutes), sync on demand, or force a re-upload.
   Review the results in the run log or through the monitoring endpoint.
 
+## Screenshots
+
+The web interface is shown below with sample servers and certificates.
+
+### Overview
+
+![Overview with a successful sync from Demo Master to Demo Node](docs/screenshots/overview.png)
+
+### Server configuration
+
+![Master server configuration with API and SSH download options](docs/screenshots/server-configuration.png)
+
+### Run log
+
+![Run log showing certificate uploads, proxy-host assignments, and an expired certificate skipped](docs/screenshots/run-log.png)
+
 ## Quick start
 
 1. Copy the environment template and restrict access to the copy.
@@ -155,10 +171,11 @@ python -m dev.e2e
 
 The end-to-end checks cover certificate creation and reuse, unchanged
 certificates, rotation, proxy-host assignment, expired certificates, and
-authentication failures. GitHub Actions also builds the Docker image and checks
-the running container's `/health` and `/login` endpoints.
-Pushing a version tag such as `v0.1.0` publishes the tested image as an
-attachment to the corresponding GitHub release.
+authentication failures, and changes to a node's address or certificate
+mapping. GitHub Actions builds the Docker image, checks `/health` and
+`/login`, and runs the end-to-end checks against that container. For a
+version tag such as `v0.1.0`, a separate job publishes the tested image to
+GitHub Releases after all checks pass.
 
 ## License
 

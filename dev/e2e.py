@@ -121,9 +121,31 @@ check(requests.get(APP + "/api/status").status_code == 401, "api/status без �
 for p in ("/", "/servers", "/servers/1", "/servers/2", "/certs", "/logs", "/settings"):
     check(s.get(APP + p).status_code == 200, f"страница {p}")
 
+# сохранённый ID больше не указывает на ожидаемый сертификат
+cloud_id = syncs["sync: cloud.example.ru"]["id"]
+cloud_uploads = next(c["uploads"] for c in node()["certs"] if c["id"] == cloud_id)
+debug_url = "http://127.0.0.1:9002/_debug"
+requests.post(debug_url, json={"cid": cloud_id, "nice_name": "manual cloud"}).raise_for_status()
+post("/sync", {}, "/")
+wait_sync()
+certs_after_rename = {c["id"]: c for c in node()["certs"]}
+check(certs_after_rename[cloud_id]["uploads"] == cloud_uploads,
+      "переименованный сертификат не перезаписан")
+new_cloud = next(c for c in certs_after_rename.values() if c["nice_name"] == "sync: cloud.example.ru")
+check(new_cloud["id"] != cloud_id and new_cloud["uploads"] == 1,
+      "сертификат загружен в новую запись")
+
+# тот же mock доступен по другому адресу, что позволяет проверить сброс хешей
+replacement = {"name": "DietPi", "role": "node", "url": "http://localhost:9002",
+               "username": "admin@example.com", "enabled": "on", "ssh_port": "22"}
+post("/servers/2", replacement, "/servers/2")
+post("/sync", {}, "/")
+st = wait_sync()
+check(st["last_run"]["status"] == "ok" and "загружено: 3" in st["last_run"]["summary"],
+      "после смены адреса ноды действующие сертификаты загружены заново")
+
 # неверный пароль ноды -> ошибка в статусе, мастер не ломается
-post("/servers/2", {"name": "DietPi", "role": "node", "url": "http://127.0.0.1:9002",
-                    "username": "admin@example.com", "password": "WRONG", "enabled": "on", "ssh_port": "22"}, "/servers/2")
+post("/servers/2", {**replacement, "password": "WRONG"}, "/servers/2")
 requests.post("http://127.0.0.1:9001/_debug", json={"cid": 11, "days": 6})
 post("/sync", {}, "/")
 st = wait_sync()
